@@ -1,0 +1,58 @@
+import { test } from 'node:test';
+import { strict as assert } from 'node:assert';
+import { readFile } from 'node:fs/promises';
+import { PGlite } from '@electric-sql/pglite';
+
+test('migración Neon: datos aislados, idempotencia, anulación y auditoría',async()=>{
+ const db=new PGlite();
+ try{
+  const sql=await readFile(new URL('../sql/003_neon_initial.sql',import.meta.url),'utf8');
+  await db.exec(sql);
+  const orgs=await db.query<{id:string}>("INSERT INTO organizations(name) VALUES('Ensayo A'),('Ensayo B') RETURNING id");
+  const [a,b]=orgs.rows.map(r=>r.id);
+  await db.query("INSERT INTO memberships(org_id,user_id,role) VALUES($1,'test-lucia','admin'),($2,'test-diego','operator')",[a,b]);
+  const denied=await db.query('SELECT org_id FROM memberships WHERE user_id=$1 AND org_id=$2',['test-lucia',b]);
+  assert.equal(denied.rowCount,0);
+  const contact=await db.query<{id:string}>("INSERT INTO contacts(org_id,alias,source,created_by) VALUES($1,'Persona ficticia','instagram','test-lucia') RETURNING id",[a]);
+  const cid=contact.rows[0].id;
+  await assert.rejects(db.query("INSERT INTO sales(org_id,contact_id,service,agreed_amount,created_by) VALUES($1,$2,'Tarot',2500,'test-diego')",[b,cid]));
+  const key='33333333-3333-4333-8333-333333333333';
+  await db.query("INSERT INTO inquiries(org_id,contact_id,source,created_by,idempotency_key) VALUES($1,$2,'instagram','test-lucia',$3)",[a,cid,key]);
+  await assert.rejects(db.query("INSERT INTO inquiries(org_id,contact_id,source,created_by,idempotency_key) VALUES($1,$2,'instagram','test-lucia',$3)",[a,cid,key]));
+  const sale=await db.query<{id:string}>("INSERT INTO sales(org_id,contact_id,service,agreed_amount,created_by) VALUES($1,$2,'Tarot',2500,'test-lucia') RETURNING id",[a,cid]);
+  const sid=sale.rows[0].id;
+  await assert.rejects(db.query("INSERT INTO payments(org_id,sale_id,amount,method,kind,idempotency_key,created_by) VALUES($1,$2,1000,'cash','payment',gen_random_uuid(),'test-diego')",[b,sid]));
+  const payment=await db.query<{id:string}>("INSERT INTO payments(org_id,sale_id,amount,method,kind,idempotency_key,created_by) VALUES($1,$2,1000,'cash','payment',gen_random_uuid(),'test-lucia') RETURNING id",[a,sid]);
+  const pid=payment.rows[0].id;
+  await assert.rejects(db.query("INSERT INTO payments(org_id,sale_id,amount,method,kind,idempotency_key,created_by) VALUES($1,$2,1001,'cash','refund',gen_random_uuid(),'test-lucia')",[a,sid]));
+  await db.query("INSERT INTO payments(org_id,sale_id,amount,method,kind,idempotency_key,created_by) VALUES($1,$2,500,'cash','refund',gen_random_uuid(),'test-lucia')",[a,sid]);
+  await assert.rejects(db.query("UPDATE payments SET voided_at=now(),voided_by='test-lucia',void_reason='Error de importe' WHERE id=$1",[pid]));
+  await assert.rejects(db.query('UPDATE payments SET amount=2500 WHERE id=$1',[pid]));
+  const refund=await db.query<{id:string}>("SELECT id FROM payments WHERE sale_id=$1 AND kind='refund'",[sid]);
+  await db.query("UPDATE payments SET voided_at=now(),voided_by='test-lucia',void_reason='Devolución errónea' WHERE id=$1",[refund.rows[0].id]);
+  await db.query("UPDATE payments SET voided_at=now(),voided_by='test-lucia',void_reason='Error de importe' WHERE id=$1",[pid]);
+  await assert.rejects(db.query("UPDATE payments SET void_reason='Segundo cambio' WHERE id=$1",[pid]));
+  await assert.rejects(db.query('DELETE FROM payments WHERE id=$1',[pid]));
+  const audit=await db.query<{operation:string}>('SELECT operation FROM audit_log WHERE table_name=\'payments\' AND row_id=$1 ORDER BY id',[pid]);
+  assert.deepEqual(audit.rows.map(x=>x.operation),['INSERT','UPDATE']);
+  const amount=await db.query<{amount:string}>("SELECT COALESCE(sum(CASE WHEN kind='refund' THEN -amount ELSE amount END),0)::text AS amount FROM payments WHERE org_id=$1 AND voided_at IS NULL",[a]);
+  assert.equal(amount.rows[0].amount,'0');
+  const sale2=await db.query<{id:string}>("INSERT INTO sales(org_id,contact_id,service,agreed_amount,created_by) VALUES($1,$2,'Tarot',3000,'test-lucia') RETURNING id",[a,cid]);
+  for(const [value,kind] of [[1000,'payment'],[2000,'payment'],[500,'refund']] as const)await db.query('INSERT INTO payments(org_id,sale_id,amount,method,kind,idempotency_key,created_by) VALUES($1,$2,$3,\'cash\',$4,gen_random_uuid(),\'test-lucia\')',[a,sale2.rows[0].id,value,kind]);
+  const net=await db.query<{amount:string}>("SELECT sum(CASE WHEN kind='refund' THEN -amount ELSE amount END)::text AS amount FROM payments WHERE org_id=$1 AND voided_at IS NULL",[a]);
+  assert.equal(net.rows[0].amount,'2500.00');
+  const keyExpense='77777777-7777-4777-8777-777777777777';
+  await db.query("INSERT INTO expenses(org_id,amount,category,occurred_on,idempotency_key,created_by) VALUES($1,250.50,'ads','2026-11-16',$2,'test-lucia')",[a,keyExpense]);
+  await assert.rejects(db.query("INSERT INTO expenses(org_id,amount,category,occurred_on,idempotency_key,created_by) VALUES($1,250.50,'ads','2026-11-16',$2,'test-lucia')",[a,keyExpense]));
+  await db.exec('BEGIN');
+  await db.query("INSERT INTO contacts(org_id,alias,source,created_by) VALUES($1,'Rollback ficticio','web','test-lucia')",[a]);
+  await assert.rejects(db.query("INSERT INTO inquiries(org_id,source,created_by,idempotency_key) VALUES($1,'invalid','test-lucia',gen_random_uuid())",[a]));
+  await db.exec('ROLLBACK');
+  const rolledBack=await db.query("SELECT id FROM contacts WHERE alias='Rollback ficticio'");
+  assert.equal(rolledBack.rowCount,0);
+  const hash='0'.repeat(64);
+  const reserve=()=>db.query("INSERT INTO report_dispatches(org_id,start_date,end_date,recipient,report_hash,status) VALUES($1,'2026-11-09','2026-11-15','test@example.invalid',$2,'pending') ON CONFLICT(org_id,start_date,end_date,report_hash) DO NOTHING RETURNING id",[a,hash]);
+  assert.equal((await reserve()).rowCount,1);
+  assert.equal((await reserve()).rowCount,0);
+ }finally{await db.close()}
+});

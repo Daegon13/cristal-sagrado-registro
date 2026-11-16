@@ -1,9 +1,8 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Activity, ArrowDownToLine, CircleDollarSign, CreditCard, LogOut, Mail, MessageCircle, Plus, RefreshCw, Users, Wallet, X } from 'lucide-react';
-import type { User } from '@supabase/supabase-js';
-import { getSupabase } from '@/lib/supabase';
-import { localToday, currentLocalWeek } from '@/lib/time';
+import { authClient } from '@/lib/auth/client';
+import { localToday, currentLocalWeek, utcBoundary, addDays } from '@/lib/time';
 import { netReceived, costsRecorded } from '@/lib/finance';
 import { Contact, Inquiry, Sale, Payment, Expense, AuditEntry, money, SOURCES, METHODS, SERVICES } from '@/lib/types';
 
@@ -13,10 +12,19 @@ const isoToday=()=>localToday();
 const dateTime=(s:string)=>new Date(s).toLocaleString('es-UY',{timeZone:'America/Montevideo',dateStyle:'short',timeStyle:'short'});
 const currentWeek=()=>currentLocalWeek();
 const safeErr=(error:unknown)=>error instanceof Error?error.message:String(error);
+async function api(path:string,body?:Record<string,unknown>){
+ const r=await fetch(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store'}:{cache:'no-store'});
+ const data=await r.json();if(!r.ok)throw new Error(data.error||'No se pudo completar la operación.');return data;
+}
+async function allRows(table:string,orgId:string){
+ const rows:unknown[]=[];for(let page=0;page<10000;page++){
+  const data=await api(`/api/data?table=${table}&orgId=${encodeURIComponent(orgId)}&page=${page}`);
+  rows.push(...data.rows);if(!data.hasMore)return rows;
+ }throw new Error('Demasiados registros para mostrar.');
+}
 
 export default function Home(){
- const supa=useMemo(()=>getSupabase(),[]);
- const [user,setUser]=useState<User|null>(null),[loading,setLoading]=useState(true),[email,setEmail]=useState(''),[password,setPassword]=useState('');
+ const [user,setUser]=useState<{id:string;email:string}|null>(null),[loading,setLoading]=useState(true),[configured,setConfigured]=useState(false),[email,setEmail]=useState(''),[password,setPassword]=useState('');
  const [orgId,setOrgId]=useState(''),[tab,setTab]=useState<Tab>('home'),[modal,setModal]=useState<Modal>(null),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[error,setError]=useState('');
  const [contacts,setContacts]=useState<Contact[]>([]),[inquiries,setInquiries]=useState<Inquiry[]>([]),[sales,setSales]=useState<Sale[]>([]),[payments,setPayments]=useState<Payment[]>([]),[expenses,setExpenses]=useState<Expense[]>([]);
  const [alias,setAlias]=useState(''),[source,setSource]=useState('instagram'),[selectedContact,setSelectedContact]=useState(''),[service,setService]=useState(SERVICES[0]),[price,setPrice]=useState('2500');
@@ -28,39 +36,24 @@ export default function Home(){
  const [audit,setAudit]=useState<AuditEntry[]>([]);
  const inquiryKey=useRef(crypto.randomUUID()),paymentKey=useRef(crypto.randomUUID()),expenseKey=useRef(crypto.randomUUID());
  const refresh=useCallback(async(id:string)=>{
-   if(!supa||!id)return;
-   const [c,i,s,p,e,a]=await Promise.all([
-    supa.from('contacts').select('*',{count:'exact'}).eq('org_id',id).order('created_at',{ascending:false}).limit(2000),
-    supa.from('inquiries').select('*',{count:'exact'}).eq('org_id',id).order('created_at',{ascending:false}).limit(2000),
-    supa.from('sales').select('*',{count:'exact'}).eq('org_id',id).order('created_at',{ascending:false}).limit(2000),
-    supa.from('payments').select('*',{count:'exact'}).eq('org_id',id).order('received_at',{ascending:false}).limit(2000),
-    supa.from('expenses').select('*',{count:'exact'}).eq('org_id',id).order('occurred_on',{ascending:false}).limit(2000),
-    supa.from('audit_log').select('id,table_name,operation,created_at,actor,before_data,after_data').eq('org_id',id).order('created_at',{ascending:false}).limit(60),
-   ]);
-   if([c,i,s,p,e,a].some(r=>r.error||((r.count??0)>(r.data?.length??0)))){setContacts([]);setInquiries([]);setSales([]);setPayments([]);setExpenses([]);setAudit([]);setError('No se pudieron recuperar todos los registros completos. Revisá tu conexión o solicitá exportación paginada.');return}
-   setContacts(c.data||[]);setInquiries(i.data||[]);setSales(s.data||[]);setPayments(p.data||[]);setExpenses(e.data||[]);setAudit((a.data||[]) as AuditEntry[]);
- },[supa]);
+    if(!id)return;
+    try {const [c,i,s,p,e,a]=await Promise.all(['contacts','inquiries','sales','payments','expenses','audit_log'].map(t=>allRows(t,id)));
+     setContacts(c as Contact[]);setInquiries(i as Inquiry[]);setSales(s as Sale[]);setPayments(p as Payment[]);setExpenses(e as Expense[]);setAudit(a as AuditEntry[]);
+    } catch(e){setContacts([]);setInquiries([]);setSales([]);setPayments([]);setExpenses([]);setAudit([]);setError(safeErr(e));}
+  },[]);
  useEffect(()=>{
-   if(!supa){setLoading(false);return}
-   let active=true;
-   const session=supa.auth.getUser().then(async({data})=>{if(!active)return;setUser(data.user);setLoading(false)});
-   const {data:auth}=supa.auth.onAuthStateChange((_event,session)=>{if(active)setUser(session?.user??null)});
-   return ()=>{active=false;void session;auth.subscription.unsubscribe()};
- },[supa]);
+    let active=true;void (async()=>{try{const health=await api('/api/health');if(!active)return;setConfigured(health.configured);
+      if(health.configured){const {data}=await authClient.getSession();if(active)setUser(data?.user??null);}
+    }catch{if(active)setError('No se pudo verificar el servidor.')}finally{if(active)setLoading(false)}})();return()=>{active=false};
+  },[]);
  useEffect(()=>{
-  if(!user||!supa){setOrgId('');return}
-  let active=true;
-  void supa.from('memberships').select('org_id').eq('user_id',user.id).limit(1).maybeSingle().then(({data,error})=>{
-    if(!active)return;
-    if(error){setError('No se pudo verificar la organización.');return}
-    if(!data){setError('Tu usuario todavía no pertenece a una organización. Pedile al administrador que complete la configuración.');return}
-    setOrgId(data.org_id);void refresh(data.org_id);
-  });return()=>{active=false};
- },[user,supa,refresh]);
+   if(!user){setOrgId('');return}let active=true;
+   void api('/api/me').then(data=>{if(active){setOrgId(data.orgId);void refresh(data.orgId)}}).catch(e=>{if(active)setError(safeErr(e))});return()=>{active=false};
+  },[user,refresh]);
  const person=(id:string)=>contacts.find(x=>x.id===id)?.alias||'Cliente';
  const sale=(id:string)=>sales.find(x=>x.id===id);
  const thisWeek=useMemo(()=>{
-  const start=`${period.start}T03:00:00Z`;const endDate=new Date(`${period.end}T12:00:00Z`);endDate.setUTCDate(endDate.getUTCDate()+1);const end=`${endDate.toISOString().slice(0,10)}T03:00:00Z`;
+   const start=utcBoundary(period.start),end=utcBoundary(addDays(period.end,1));
   const p=payments.filter(x=>!x.voided_at&&x.received_at>=start&&x.received_at<end),e=expenses.filter(x=>!x.voided_at&&x.occurred_on>=period.start&&x.occurred_on<=period.end),i=inquiries.filter(x=>x.created_at>=start&&x.created_at<end);
   const collected=netReceived(p);
   return {collected,expenses:costsRecorded(e),clients:new Set(p.filter(x=>x.kind==='payment').map(x=>sale(x.sale_id)?.contact_id).filter(Boolean)).size,inquiries:i.length};
@@ -68,47 +61,41 @@ export default function Home(){
  function show(m:Modal){setNotice('');setError('');setModal(m);if(m==='payment'){setSelectedSale('');setPaymentAmount('');paymentKey.current=crypto.randomUUID()}if(m==='expense'){expenseKey.current=crypto.randomUUID()}if(m==='inquiry'){setAlias('');setSelectedContact('');setSource('instagram');inquiryKey.current=crypto.randomUUID()}}
  function showEdit(c:Contact){setEditedContact(c.id);setEditAlias(c.alias);show('editContact')}
  function showVoid(table:'payments'|'expenses',id:string){setVoidTarget({table,id});setVoidReason('');show('void')}
- async function execute(task:()=>PromiseLike<{error?:{message:string}|null}>,success:string){setBusy(true);setError('');setNotice('');try{const r=await task();if(r.error)throw new Error(r.error.message);setModal(null);setNotice(success);await refresh(orgId)}catch(e){setError(safeErr(e))}finally{setBusy(false)}}
- async function submitLogin(e:FormEvent){e.preventDefault();if(!supa)return;setBusy(true);setError('');const r=await supa.auth.signInWithPassword({email,password});if(r.error)setError('No se pudo iniciar sesión. Comprobá el correo y la contraseña.');setBusy(false)}
- async function submitInquiry(e:FormEvent){e.preventDefault();if(!supa||!user||!orgId||busy)return;
+  async function execute(body:Record<string,unknown>,success:string){setBusy(true);setError('');setNotice('');try{await api('/api/data',{orgId,...body});setModal(null);setNotice(success);await refresh(orgId)}catch(e){setError(safeErr(e))}finally{setBusy(false)}}
+  async function submitLogin(e:FormEvent){e.preventDefault();setBusy(true);setError('');try{const r=await authClient.signIn.email({email,password});if(r.error)throw new Error('No se pudo iniciar sesión.');const session=await authClient.getSession();setUser(session.data?.user??null)}catch{setError('No se pudo iniciar sesión. Comprobá el correo y la contraseña.')}finally{setBusy(false)}}
+  async function submitInquiry(e:FormEvent){e.preventDefault();if(!user||!orgId||busy)return;
   setBusy(true);setError('');setNotice('');try{
-   const r=await supa.rpc('register_inquiry', {p_org_id:orgId,p_source:source,p_alias:alias.trim(),p_contact_id:selectedContact||null,p_key:inquiryKey.current});
-   if(r.error)throw r.error;
+    await api('/api/data',{action:'inquiry',orgId,source,alias:alias.trim(),contactId:selectedContact||null,key:inquiryKey.current});
    setModal(null);setNotice('Consulta registrada.');inquiryKey.current=crypto.randomUUID();await refresh(orgId);
   }catch(e){setError(safeErr(e))}finally{setBusy(false)}
  }
- async function submitEditContact(e:FormEvent){e.preventDefault();if(!supa||!orgId||!editedContact||!editAlias.trim())return;
-  await execute(()=>supa.from('contacts').update({alias:editAlias.trim().slice(0,100)}).eq('id',editedContact).eq('org_id',orgId),'Alias actualizado. El cambio quedó en el historial.');
+  async function submitEditContact(e:FormEvent){e.preventDefault();if(!orgId||!editedContact||!editAlias.trim())return;
+   await execute({action:'contactAlias',id:editedContact,alias:editAlias.trim()},'Alias actualizado. El cambio quedó en el historial.');
  }
- async function submitVoid(e:FormEvent){e.preventDefault();if(!supa||!orgId||!voidTarget||voidReason.trim().length<6)return;
-  await execute(()=>supa.from(voidTarget.table).update({voided_at:new Date().toISOString(),void_reason:voidReason.trim().slice(0,240)}).eq('id',voidTarget.id).eq('org_id',orgId).is('voided_at',null),'Registro anulado con historial. Si correspondía un importe distinto, cargá un nuevo asiento correcto.');
+  async function submitVoid(e:FormEvent){e.preventDefault();if(!orgId||!voidTarget||voidReason.trim().length<6)return;
+   await execute({action:'void',table:voidTarget.table,id:voidTarget.id,reason:voidReason.trim()},'Registro anulado con historial. Si correspondía un importe distinto, cargá un nuevo asiento correcto.');
  }
- async function submitSale(e:FormEvent){e.preventDefault();if(!supa||!user||!selectedContact||!(Number(price)>0))return;
-  await execute(()=>supa.from('sales').insert({org_id:orgId,contact_id:selectedContact,service,agreed_amount:Number(price),created_by:user.id}),'Venta registrada.');}
- async function submitPayment(e:FormEvent){e.preventDefault();if(!supa||!user||!selectedSale||!(Number(paymentAmount)>0))return;
-  await execute(()=>supa.from('payments').insert({org_id:orgId,sale_id:selectedSale,amount:Number(paymentAmount),kind:paymentKind,method,created_by:user.id,idempotency_key:paymentKey.current}),'Movimiento registrado.');}
- async function submitExpense(e:FormEvent){e.preventDefault();if(!supa||!user||!(Number(expenseAmount)>0))return;
-  await execute(()=>supa.from('expenses').insert({org_id:orgId,amount:Number(expenseAmount),category:expenseCategory,occurred_on:expenseDate,note:expenseNote||null,idempotency_key:expenseKey.current,created_by:user.id}),'Gasto registrado.');}
- async function submitReport(e:FormEvent){e.preventDefault();if(!supa||!orgId)return;setBusy(true);setError('');setNotice('');try{
-  const session=await supa.auth.getSession();const token=session.data.session?.access_token;if(!token)throw new Error('Sesión vencida.');
-  const r=await fetch('/api/reports/send',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({orgId,start:period.start,end:period.end}),cache:'no-store'});
-  const j=await r.json();if(!r.ok)throw new Error(j.error||'Error al enviar');setModal(null);setNotice(j.alreadySent?'Ese mismo informe ya había sido enviado.':'El correo fue aceptado para envío.');
+  async function submitSale(e:FormEvent){e.preventDefault();if(!user||!selectedContact||!(Number(price)>0))return;
+   await execute({action:'sale',contactId:selectedContact,service,amount:price},'Venta registrada.');}
+  async function submitPayment(e:FormEvent){e.preventDefault();if(!user||!selectedSale||!(Number(paymentAmount)>0))return;
+   await execute({action:'payment',saleId:selectedSale,amount:paymentAmount,kind:paymentKind,method,key:paymentKey.current},'Movimiento registrado.');}
+  async function submitExpense(e:FormEvent){e.preventDefault();if(!user||!(Number(expenseAmount)>0))return;
+   await execute({action:'expense',amount:expenseAmount,category:expenseCategory,occurredOn:expenseDate,note:expenseNote,key:expenseKey.current},'Gasto registrado.');}
+  async function submitReport(e:FormEvent){e.preventDefault();if(!orgId)return;setBusy(true);setError('');setNotice('');try{
+   const j=await api('/api/reports/send',{orgId,start:period.start,end:period.end});setModal(null);setNotice(j.alreadySent?'Ese mismo informe ya había sido enviado.':'El correo fue aceptado para envío.');
  }catch(e){setError(safeErr(e))}finally{setBusy(false)}}
- function downloadSnapshot(){
-  const report={schema:'cristal-sagrado-snapshot/v1',exportedAt:new Date().toISOString(),contacts,inquiries,sales,payments,expenses};
-  const blob=new Blob([JSON.stringify(report,null,2)],{type:'application/json'});const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=`cs-registro-${isoToday()}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),3000);
- }
+  async function downloadSnapshot(format:unknown='json'){try{const type=format==='csv'?'csv':'json';const r=await fetch(`/api/export?format=${type}&orgId=${encodeURIComponent(orgId)}`,{cache:'no-store'});if(!r.ok){const j=await r.json();throw new Error(j.error||'No se pudo exportar.')}const blob=await r.blob();const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=`cs-registro-${isoToday()}.${type}`;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),3000)}catch(e){setError(safeErr(e))}}
  if(loading)return <main><p>Cargando acceso privado…</p></main>;
- if(!supa)return <main><div className="card login"><h2>Configuración pendiente</h2><p className="muted">La aplicación necesita las variables públicas de Supabase para habilitar el inicio de sesión. Consultá el README.</p></div></main>;
+  if(!configured)return <main><div className="card login"><h2>Configuración pendiente</h2><p className="muted">La aplicación necesita Neon PostgreSQL y Neon Auth. Consultá el README.</p></div></main>;
  if(!user)return <main><div className="card login stack"><div className="brand">☾ Cristal Sagrado</div><h2>Registro privado</h2><p className="sub">Ingresá con la cuenta autorizada. No hay registro público.</p><form onSubmit={submitLogin} className="stack"><div className="field"><label>Correo electrónico</label><input type="email" required value={email} onChange={e=>setEmail(e.target.value)} autoComplete="username"/></div><div className="field"><label>Contraseña</label><input type="password" required value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password"/></div><button className="primary full" disabled={busy}>Entrar</button></form>{error&&<p className="error" role="alert">{error}</p>}</div></main>;
- if(!orgId)return <main><div className="card login stack"><div className="brand">☾ Cristal Sagrado</div><h2>Verificando acceso</h2><p className="muted">{error||'Cargando organización autorizada…'}</p><button className="secondary" onClick={()=>void supa.auth.signOut()}>Cerrar sesión</button></div></main>;
+  if(!orgId)return <main><div className="card login stack"><div className="brand">☾ Cristal Sagrado</div><h2>Verificando acceso</h2><p className="muted">{error||'Cargando organización autorizada…'}</p><button className="secondary" onClick={()=>void authClient.signOut().then(()=>setUser(null))}>Cerrar sesión</button></div></main>;
  return <main>
-  <header className="top"><div><div className="brand">☾ Cristal Sagrado</div><div className="sub">Clientes, ventas y cobros</div></div><button className="secondary small" title="Cerrar sesión" onClick={()=>void supa.auth.signOut()}><LogOut size={16}/></button></header>
+  <header className="top"><div><div className="brand">☾ Cristal Sagrado</div><div className="sub">Clientes, ventas y cobros</div></div><button className="secondary small" title="Cerrar sesión" onClick={()=>void authClient.signOut().then(()=>setUser(null))}><LogOut size={16}/></button></header>
   {!orgId&&<p className="notice">La organización todavía no está configurada. Consultá las instrucciones del README.</p>}
   {notice&&<p className="success" role="status">{notice}</p>}{error&&<p className="error" role="alert">{error}</p>}
   <nav className="tabs" aria-label="Secciones">{([['home','Inicio'],['contacts','Clientes'],['sales','Ventas'],['finance','Finanzas']] as const).map(([key,label])=><button key={key} className={'tab '+(tab===key?'active':'')} onClick={()=>setTab(key)}>{label}</button>)}</nav>
   {tab==='home'&&<><div className="hero"><div className="label">Cobrado · semana seleccionada</div><div className="heroValue">{money(thisWeek.collected)}</div><div className="sub">{thisWeek.clients} clientes pagos · {thisWeek.inquiries} consultas</div></div><div className="grid actions"><button className="action" disabled={!orgId} onClick={()=>show('inquiry')}><MessageCircle/><span>Consulta IG</span></button><button className="action" disabled={!orgId||!contacts.length} onClick={()=>show('sale')}><Plus/><span>Nueva venta</span></button><button className="action" disabled={!orgId||!sales.length} onClick={()=>show('payment')}><CreditCard/><span>Registrar cobro</span></button><button className="action" disabled={!orgId} onClick={()=>show('expense')}><CircleDollarSign/><span>Gasto</span></button></div>
-    <div className="card stack"><div className="row"><h2>Resumen semanal</h2><button className="secondary small" onClick={()=>void refresh(orgId)}><RefreshCw size={14}/></button></div><div className="grid"><div><div className="label">Ingresos</div><div className="stat">{money(thisWeek.collected)}</div></div><div><div className="label">Gastos</div><div className="stat">{money(thisWeek.expenses)}</div></div><div><div className="label">Diferencia parcial</div><div className="stat">{money(thisWeek.collected-thisWeek.expenses)}</div></div><div><div className="label">Consultas</div><div className="stat">{thisWeek.inquiries}</div></div></div><p className="help">Cifras basadas en registros introducidos aquí. No representan conciliación bancaria ni beneficio neto.</p><div className="row"><button className="secondary small" onClick={()=>show('report')}><Mail size={14}/> Enviar informe</button><button className="secondary small" onClick={downloadSnapshot}><ArrowDownToLine size={14}/> Exportar datos</button></div></div>
+    <div className="card stack"><div className="row"><h2>Resumen semanal</h2><button className="secondary small" onClick={()=>void refresh(orgId)}><RefreshCw size={14}/></button></div><div className="grid"><div><div className="label">Ingresos</div><div className="stat">{money(thisWeek.collected)}</div></div><div><div className="label">Gastos</div><div className="stat">{money(thisWeek.expenses)}</div></div><div><div className="label">Diferencia parcial</div><div className="stat">{money(thisWeek.collected-thisWeek.expenses)}</div></div><div><div className="label">Consultas</div><div className="stat">{thisWeek.inquiries}</div></div></div><p className="help">Cifras basadas en registros introducidos aquí. No representan conciliación bancaria ni beneficio neto.</p><div className="row"><button className="secondary small" onClick={()=>show('report')}><Mail size={14}/> Enviar informe</button><button className="secondary small" onClick={()=>void downloadSnapshot('json')}><ArrowDownToLine size={14}/> JSON</button><button className="secondary small" onClick={()=>void downloadSnapshot('csv')}><ArrowDownToLine size={14}/> CSV</button></div></div>
   </>}
   {tab==='contacts'&&<div className="card"><div className="row"><h2>Clientes ({contacts.length})</h2><button className="secondary small" onClick={()=>show('inquiry')}>+ Consulta</button></div><input aria-label="Buscar clientes" value={contactQuery} onChange={e=>setContactQuery(e.target.value)} placeholder="Buscar cliente por alias…" />{contacts.filter(c=>c.alias.toLocaleLowerCase('es-UY').includes(contactQuery.toLocaleLowerCase('es-UY'))).slice(0,100).map(c=><div className="listitem row" key={c.id}><div><strong>{c.alias}</strong><div className="sub">{SOURCES.find(s=>s.value===c.source)?.label||c.source} · {dateTime(c.created_at)}</div></div><div className="row"><span className="sub">{sales.filter(s=>s.contact_id===c.id).length} ventas</span><button className="secondary small" onClick={()=>showEdit(c)}>Editar</button></div></div>)}{!contacts.length&&<p className="muted">Todavía no hay clientes registrados.</p>}</div>}
   {tab==='sales'&&<div className="card"><div className="row"><h2>Ventas ({sales.length})</h2><button className="secondary small" onClick={()=>show('sale')}>+ Venta</button></div>{sales.slice(0,100).map(s=>{const paid=payments.filter(p=>!p.voided_at&&p.sale_id===s.id).reduce((v,p)=>v+Number(p.amount)*(p.kind==='refund'?-1:1),0);return <div className="listitem" key={s.id}><div className="row"><strong>{s.service}</strong><span>{money(Number(s.agreed_amount))}</span></div><div className="row sub"><span>{person(s.contact_id)} · {dateTime(s.created_at)}</span><span>Cobrado {money(paid)}</span></div></div>})}{!sales.length&&<p className="muted">Todavía no hay ventas.</p>}</div>}
