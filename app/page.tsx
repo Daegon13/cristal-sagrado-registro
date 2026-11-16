@@ -68,7 +68,7 @@ export default function Home(){
  function show(m:Modal){setNotice('');setError('');setModal(m);if(m==='payment'){setSelectedSale('');setPaymentAmount('');paymentKey.current=crypto.randomUUID()}if(m==='expense'){expenseKey.current=crypto.randomUUID()}if(m==='inquiry'){setAlias('');setSelectedContact('');setSource('instagram');inquiryKey.current=crypto.randomUUID()}}
  function showEdit(c:Contact){setEditedContact(c.id);setEditAlias(c.alias);show('editContact')}
  function showVoid(table:'payments'|'expenses',id:string){setVoidTarget({table,id});setVoidReason('');show('void')}
- async function execute(task:()=>Promise<{error?:{message:string}|null}>,success:string){setBusy(true);setError('');setNotice('');try{const r=await task();if(r.error)throw new Error(r.error.message);setModal(null);setNotice(success);await refresh(orgId)}catch(e){setError(safeErr(e))}finally{setBusy(false)}}
+ async function execute(task:()=>PromiseLike<{error?:{message:string}|null}>,success:string){setBusy(true);setError('');setNotice('');try{const r=await task();if(r.error)throw new Error(r.error.message);setModal(null);setNotice(success);await refresh(orgId)}catch(e){setError(safeErr(e))}finally{setBusy(false)}}
  async function submitLogin(e:FormEvent){e.preventDefault();if(!supa)return;setBusy(true);setError('');const r=await supa.auth.signInWithPassword({email,password});if(r.error)setError('No se pudo iniciar sesión. Comprobá el correo y la contraseña.');setBusy(false)}
  async function submitInquiry(e:FormEvent){e.preventDefault();if(!supa||!user||!orgId||busy)return;
   setBusy(true);setError('');setNotice('');try{
