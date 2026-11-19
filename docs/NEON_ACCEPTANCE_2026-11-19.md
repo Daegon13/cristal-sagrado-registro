@@ -2,7 +2,7 @@
 
 ## Decisión: NO-GO para Production
 
-PR #1 continúa en borrador y sin fusionar. El Preview redeployado del commit `af83f12` está `READY` y `/api/health` devuelve HTTP 200 con `configured:true`. La integración técnica y el flujo financiero ficticio funcionan en la rama Preview. Se comprobó una restauración aislada del respaldo ficticio. Diego y la cuenta QA confirmaron acceso a sus respectivas organizaciones; falta que Lucía confirme la pantalla tras atravesar la protección de Vercel y el único correo controlado de Resend. Production no recibió esquema ni datos de la app.
+PR #1 continúa en borrador y sin fusionar. El Preview redeployado del commit `af83f12` está `READY` y `/api/health` devuelve HTTP 200 con `configured:true`. La integración técnica y el flujo financiero ficticio funcionan en la rama Preview. Se comprobó una restauración aislada del respaldo ficticio. Lucía, Diego y la cuenta QA confirmaron acceso a sus respectivas organizaciones. Falta el único correo controlado de Resend y su comprobación de entrega y adjuntos. Production no recibió esquema ni datos de la app.
 
 ## Entorno y datos
 
@@ -31,10 +31,12 @@ PR #1 continúa en borrador y sin fusionar. El Preview redeployado del commit `a
 - Con autorización del propietario se creó una cuenta QA con alias de su Gmail y una membresía `admin` solo en `QA ficticia - Preview`. El alias y su enlace Magic Link no se publican en esta PR. No se solicitó el enlace automáticamente; su inicio de sesión queda pendiente de la prueba manual. Cristal Sagrado mantiene exactamente dos membresías reales.
 - El propietario confirmó que el inicio de sesión con su cuenta principal funcionó. Una consulta de solo lectura a Neon Auth encontró una sesión activa de Diego y otra de Lucía, pero ninguna del alias QA. La sesión de Lucía demuestra autenticación en Neon; aún no demuestra que haya visto Cristal Sagrado porque no tiene cuenta de Vercel. Se creó un enlace temporal para el Preview protegido y se comprobó con una petición sin sesión de Vercel que abre la app con HTTP 200. Ese enlace de acceso no se publica en la PR.
 - Posteriormente el propietario confirmó que ingresó con el alias QA y vio `QA ficticia - Preview`. Neon registró una sesión QA activa; esa identidad tiene una sola membresía en la organización ficticia y ninguna en Cristal Sagrado. Sigue habiendo cero despachos de informe. Lucía aún no confirmó la vista de la app.
+- Lucía confirmó finalmente que ve Cristal Sagrado al abrir la URL compartida de Preview y usar un Magic Link nuevo en un navegador externo. Neon registró una segunda sesión activa para ella. El primer intento desde el navegador interno de Gmail volvía al panel de acceso; el origen exacto de esa pérdida de cookie no se demostró, pero el acceso con navegador externo funcionó. Diego y QA también confirmaron acceso. El enlace compartido de Vercel es temporal y no se incluye aquí.
+- Antes del envío se repitió la consulta del período ficticio `2026-11-19`: 8 consultas, 4 ventas, 12 cobros/devoluciones vigentes por 10.000,00 UYU netos y 3 gastos por 376,50 UYU. El destinatario de Preview coincide con el Gmail conectado, `RESEND_API_KEY` y `REPORT_FROM_EMAIL` figuran en Preview, y `report_dispatches` continúa vacío. No se consultaron ni divulgaron los valores de los secretos.
 
 ## Pendiente para GO
 
-1. Diego y QA confirmaron acceso a sus respectivas organizaciones. Lucía tiene una sesión Neon activa, pero debe abrir el Preview mediante el enlace temporal, solicitar desde allí un nuevo Magic Link y confirmar que ve Cristal Sagrado. El correo saliente de Neon Auth aún usa el servicio compartido, sin SMTP propio verificado.
+1. El acceso manual de Lucía, Diego y QA pasó en Preview. Neon Auth aún usa correo compartido; el SMTP propio queda como criterio separado antes de Production.
 2. La clave y el remitente Resend ya figuran en Preview y se redeployó. **Solo después de confirmación humana previa**, realizar el único envío controlado con datos ficticios al Gmail configurado desde la sesión QA. Después comprobar el registro de despacho, la recepción en Gmail, el JSON, ambos CSV, el hash y la ausencia de duplicados. No se ha afirmado envío ni cron de correo.
 3. La restauración de datos ficticios en rama aislada pasó. La migración productiva y la fusión de `main` requieren aprobación humana aparte; permanecen fuera de esta aceptación de Preview.
 
