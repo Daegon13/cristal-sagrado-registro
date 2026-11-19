@@ -89,7 +89,9 @@ export async function POST(request:Request) {
       const old=await db.query(`SELECT * FROM ${action==='payment'?'payments':'expenses'} WHERE idempotency_key=$1`,[body.key]);
       const p=old.rows[0];
       const match=p&&p.org_id===ctx.org_id&&p.created_by===ctx.userId&&Number(p.amount)===Number(body.amount)&&
-        (action==='payment' ? p.sale_id===body.saleId&&p.method===body.method&&p.kind===body.kind : p.category===body.category&&String(p.occurred_on).slice(0,10)===body.occurredOn&&p.note===(text(body.note,1000)||null));
+        (action==='payment' ? p.sale_id===body.saleId&&p.method===body.method&&p.kind===body.kind : p.category===body.category&&
+          (p.occurred_on instanceof Date?p.occurred_on.toISOString().slice(0,10):String(p.occurred_on).slice(0,10))===body.occurredOn&&
+          p.note===(text(body.note,1000)||null));
       if(!match) return fail('Clave de operación ya usada con otros datos.',409);
       return Response.json({id:p.id,replayed:true});
     }
