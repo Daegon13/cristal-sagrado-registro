@@ -1,8 +1,8 @@
 # Neon: aceptación de Preview (19/11/2026)
 
-## Decisión: NO-GO para Production
+## Decisión: GO para Preview con observación; NO-GO para Production
 
-PR #1 continúa en borrador y sin fusionar. El Preview redeployado del commit `af83f12` está `READY` y `/api/health` devuelve HTTP 200 con `configured:true`. La integración técnica y el flujo financiero ficticio funcionan en la rama Preview. Se comprobó una restauración aislada del respaldo ficticio. Lucía, Diego y la cuenta QA confirmaron acceso a sus respectivas organizaciones. Se entregó un único correo controlado con datos ficticios y tres adjuntos; el formulario envió un período más amplio que el confirmado previamente, por lo que esa diferencia queda documentada y pendiente de aceptación. Production no recibió esquema ni datos de la app.
+PR #1 continúa en borrador y sin fusionar. El Preview redeployado del commit `af83f12` está `READY` y `/api/health` devuelve HTTP 200 con `configured:true`. La integración técnica y el flujo financiero ficticio funcionan en la rama Preview. Se comprobó una restauración aislada del respaldo ficticio. Lucía, Diego y la cuenta QA confirmaron acceso a sus respectivas organizaciones. Se entregó un único correo controlado con datos ficticios y tres adjuntos. El propietario aceptó como evidencia ese envío con la observación de que el período fue más amplio que el confirmado previamente. Production no recibió esquema ni datos de la app.
 
 ## Entorno y datos
 
@@ -40,11 +40,12 @@ PR #1 continúa en borrador y sin fusionar. El Preview redeployado del commit `a
 - **Desviación de período:** se confirmó `2026-11-19` a `2026-11-19`, pero el formulario envió `2026-11-16` a `2026-11-19`, su período semanal predeterminado. El asunto, el JSON y los nombres de los tres adjuntos muestran el período realmente enviado. Todas las 8 consultas, 4 ventas, 12 filas vigentes de cobros/devoluciones y 3 filas de gastos incluidas están fechadas el 19/11; los totales resultaron iguales al preflight del día. No se hizo ni se hará un segundo envío bajo esta autorización.
 - Gmail recibió exactamente un mensaje con el asunto `[CS-FINANZAS] 2026-11-16 a 2026-11-19 · 891e1d7433` y tres adjuntos legibles: `cs-informe-2026-11-16-2026-11-19.json`, `cs-cobros-2026-11-16-2026-11-19.csv` y `cs-gastos-2026-11-16-2026-11-19.csv`. El JSON usa `cristal-sagrado-finanzas/v2` y declara 8 consultas, 4 ventas, 12 movimientos vigentes, 12.000,00 UYU brutos, 2.000,00 UYU devueltos, 10.000,00 UYU netos, 376,50 UYU de gastos y 9.623,50 UYU de diferencia parcial. Los CSV extraídos contienen 12 y 3 filas de datos respectivamente; sus sumas coinciden con el JSON. Los campos de los adjuntos no contienen alias, nombres de clientes, correos, teléfonos ni notas libres.
 - El SHA-256 calculado sobre el JSON recibido coincide con `report_hash` en Neon y con el prefijo del asunto. Gmail muestra SPF y DKIM `pass`. La búsqueda de ese asunto encontró un solo mensaje; la rama Preview contiene un solo despacho QA. No se ejecutó un segundo envío como prueba de idempotencia.
+- El propietario aceptó expresamente el correo `16/11–19/11` como evidencia del criterio de entrega y adjuntos, con la desviación del período documentada. Esta aceptación no autoriza otro correo ni cambia el estado de Production.
 
-## Pendiente para GO
+## Resultado de Preview y pendientes de Production
 
 1. El acceso manual de Lucía, Diego y QA pasó en Preview. Neon Auth aún usa correo compartido; el SMTP propio queda como criterio separado antes de Production.
-2. El único envío QA, la recepción, los tres adjuntos, el hash y la ausencia observada de duplicados pasaron. Queda pendiente la decisión del propietario sobre aceptar la desviación del período enviado `16/11–19/11` frente al período confirmado `19/11–19/11`. No se probó ni activó el cron de correo en Production.
+2. El único envío QA, la recepción, los tres adjuntos, el hash y la ausencia observada de duplicados pasaron. El propietario aceptó con observación la diferencia entre el período enviado `16/11–19/11` y el confirmado `19/11–19/11`. No se probó ni activó el cron de correo en Production.
 3. La restauración de datos ficticios en rama aislada pasó. La migración productiva y la fusión de `main` requieren aprobación humana aparte; permanecen fuera de esta aceptación de Preview.
 
 La autorización financiera se verifica en las rutas del servidor. La conexión PostgreSQL usa un rol propietario; este informe no afirma RLS para quien posea esa credencial. Las pruebas de QA usan datos ficticios en Preview y en la rama aislada de recuperación; no se escribieron datos de QA en Production.
