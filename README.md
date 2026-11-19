@@ -2,7 +2,7 @@
 
 Aplicación privada para consultas, clientes, ventas, cobros, devoluciones, gastos e informes semanales en UYU. Next.js 16, Neon PostgreSQL y Neon Managed Better Auth. La interfaz conserva el flujo móvil de Lu y la PWA. Los datos financieros se consultan y modifican en el servidor con SQL parametrizado; el navegador nunca recibe credenciales Postgres.
 
-**Estado:** migración de código en `feat/neon-migration`. La migración `003` ya se aplicó a la rama Neon aislada de ensayo y Preview tiene la conexión de esa rama. Faltan las dos identidades Auth, membresías, la URL Auth de Preview y las pruebas HTTP y de correo. No usar con datos reales hasta pasar la prueba integral. Ver [estado de aceptación](docs/NEON_ACCEPTANCE_2026-11-18.md) y [configuración](docs/NEON_SETUP.md).
+**Estado:** Preview de `feat/neon-migration` conectado a su rama aislada de Neon, con migración `003`, dos identidades administrativas y membresías reales. El flujo financiero ficticio pasó por HTTP. Faltan los accesos reales de ambas personas, el correo de Resend y la restauración del respaldo. No usar con datos reales hasta pasar la prueba integral. Ver [estado de aceptación](docs/NEON_ACCEPTANCE_2026-11-19.md) y [configuración](docs/NEON_SETUP.md).
 
 ## Instalación
 
