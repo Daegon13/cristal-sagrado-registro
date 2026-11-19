@@ -104,6 +104,9 @@ export async function POST(request:Request) {
   } catch(e) {
     if(e instanceof SyntaxError) return fail('JSON inválido.',400);
     if(typeof e==='object'&&e&&'code' in e&&['23503','23514','22P02','22003'].includes(String(e.code))) return fail('Datos inválidos o de otra organización.',400);
+    if(typeof e==='object'&&e&&'code' in e&&e.code==='P0001'&&'message' in e&&
+      ['Refund exceeds received amount','Sale unavailable','Void would leave refunds above received amount'].includes(String(e.message)))
+      return fail('El movimiento no respeta el saldo de la venta.',400);
     return respondError(e);
   }
 }
