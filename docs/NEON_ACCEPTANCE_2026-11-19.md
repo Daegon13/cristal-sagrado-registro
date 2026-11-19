@@ -2,7 +2,7 @@
 
 ## Decisión: NO-GO para Production
 
-PR #1 continúa en borrador y sin fusionar. El Preview redeployado del commit `af83f12` está `READY` y `/api/health` devuelve HTTP 200 con `configured:true`. La integración técnica y el flujo financiero ficticio funcionan en la rama Preview. Se comprobó una restauración aislada del respaldo ficticio. Lucía, Diego y la cuenta QA confirmaron acceso a sus respectivas organizaciones. Falta el único correo controlado de Resend y su comprobación de entrega y adjuntos. Production no recibió esquema ni datos de la app.
+PR #1 continúa en borrador y sin fusionar. El Preview redeployado del commit `af83f12` está `READY` y `/api/health` devuelve HTTP 200 con `configured:true`. La integración técnica y el flujo financiero ficticio funcionan en la rama Preview. Se comprobó una restauración aislada del respaldo ficticio. Lucía, Diego y la cuenta QA confirmaron acceso a sus respectivas organizaciones. Se entregó un único correo controlado con datos ficticios y tres adjuntos; el formulario envió un período más amplio que el confirmado previamente, por lo que esa diferencia queda documentada y pendiente de aceptación. Production no recibió esquema ni datos de la app.
 
 ## Entorno y datos
 
@@ -34,10 +34,17 @@ PR #1 continúa en borrador y sin fusionar. El Preview redeployado del commit `a
 - Lucía confirmó finalmente que ve Cristal Sagrado al abrir la URL compartida de Preview y usar un Magic Link nuevo en un navegador externo. Neon registró una segunda sesión activa para ella. El primer intento desde el navegador interno de Gmail volvía al panel de acceso; el origen exacto de esa pérdida de cookie no se demostró, pero el acceso con navegador externo funcionó. Diego y QA también confirmaron acceso. El enlace compartido de Vercel es temporal y no se incluye aquí.
 - Antes del envío se repitió la consulta del período ficticio `2026-11-19`: 8 consultas, 4 ventas, 12 cobros/devoluciones vigentes por 10.000,00 UYU netos y 3 gastos por 376,50 UYU. El destinatario de Preview coincide con el Gmail conectado, `RESEND_API_KEY` y `REPORT_FROM_EMAIL` figuran en Preview, y `report_dispatches` continúa vacío. No se consultaron ni divulgaron los valores de los secretos.
 
+## Envío controlado y recepción (19/11)
+
+- El propietario autorizó expresamente **un** correo real desde su sesión QA. La app mostró «El correo fue aceptado para envío». Neon registró exactamente una fila `sent` en `report_dispatches` para `QA ficticia - Preview`, con ID de proveedor, hora de despacho y dos eventos de auditoría. Cristal Sagrado conserva cero despachos y Production sigue con cero tablas públicas de la app.
+- **Desviación de período:** se confirmó `2026-11-19` a `2026-11-19`, pero el formulario envió `2026-11-16` a `2026-11-19`, su período semanal predeterminado. El asunto, el JSON y los nombres de los tres adjuntos muestran el período realmente enviado. Todas las 8 consultas, 4 ventas, 12 filas vigentes de cobros/devoluciones y 3 filas de gastos incluidas están fechadas el 19/11; los totales resultaron iguales al preflight del día. No se hizo ni se hará un segundo envío bajo esta autorización.
+- Gmail recibió exactamente un mensaje con el asunto `[CS-FINANZAS] 2026-11-16 a 2026-11-19 · 891e1d7433` y tres adjuntos legibles: `cs-informe-2026-11-16-2026-11-19.json`, `cs-cobros-2026-11-16-2026-11-19.csv` y `cs-gastos-2026-11-16-2026-11-19.csv`. El JSON usa `cristal-sagrado-finanzas/v2` y declara 8 consultas, 4 ventas, 12 movimientos vigentes, 12.000,00 UYU brutos, 2.000,00 UYU devueltos, 10.000,00 UYU netos, 376,50 UYU de gastos y 9.623,50 UYU de diferencia parcial. Los CSV extraídos contienen 12 y 3 filas de datos respectivamente; sus sumas coinciden con el JSON. Los campos de los adjuntos no contienen alias, nombres de clientes, correos, teléfonos ni notas libres.
+- El SHA-256 calculado sobre el JSON recibido coincide con `report_hash` en Neon y con el prefijo del asunto. Gmail muestra SPF y DKIM `pass`. La búsqueda de ese asunto encontró un solo mensaje; la rama Preview contiene un solo despacho QA. No se ejecutó un segundo envío como prueba de idempotencia.
+
 ## Pendiente para GO
 
 1. El acceso manual de Lucía, Diego y QA pasó en Preview. Neon Auth aún usa correo compartido; el SMTP propio queda como criterio separado antes de Production.
-2. La clave y el remitente Resend ya figuran en Preview y se redeployó. **Solo después de confirmación humana previa**, realizar el único envío controlado con datos ficticios al Gmail configurado desde la sesión QA. Después comprobar el registro de despacho, la recepción en Gmail, el JSON, ambos CSV, el hash y la ausencia de duplicados. No se ha afirmado envío ni cron de correo.
+2. El único envío QA, la recepción, los tres adjuntos, el hash y la ausencia observada de duplicados pasaron. Queda pendiente la decisión del propietario sobre aceptar la desviación del período enviado `16/11–19/11` frente al período confirmado `19/11–19/11`. No se probó ni activó el cron de correo en Production.
 3. La restauración de datos ficticios en rama aislada pasó. La migración productiva y la fusión de `main` requieren aprobación humana aparte; permanecen fuera de esta aceptación de Preview.
 
 La autorización financiera se verifica en las rutas del servidor. La conexión PostgreSQL usa un rol propietario; este informe no afirma RLS para quien posea esa credencial. Las pruebas de QA usan datos ficticios en Preview y en la rama aislada de recuperación; no se escribieron datos de QA en Production.
