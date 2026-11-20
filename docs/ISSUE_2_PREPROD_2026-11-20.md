@@ -29,6 +29,8 @@ La migración `004` se aplicó **solo** a `preview/feat/neon-migration` (`br-shy
 | Preview autenticado con Magic Link, organización QA | Sesión y membresía QA, persistencia tras recarga, consulta anónima, venta, cobro, campaña y gasto real de período cruzado, exportación JSON, anulación auditada. La primera ejecución de la automatización convirtió por error una consulta ficticia anterior; dejó una venta QA adicional. Las ejecuciones siguientes seleccionaron la consulta anónima correcta. |
 | Autorización y finanzas en Preview | Lectura, exportación y escritura hacia otra organización: 403. Solape de gasto: 409. Exportación con campaña y gasto real de 200 UYU. Gasto anulado: 0 UYU activo. La organización real mantiene 0 contactos, consultas, ventas, cobros, campañas, gastos publicitarios y despachos. |
 
+El Preview del commit `ee220d1` (`dpl_5R9ECTQSShAfGvziqFgok3jFCjB2`) quedó READY. Playwright ejecutó **5/5 E2E** en ese despliegue a 390 px el 20/11; la captura anterior se obtuvo por separado del Preview previo. El endpoint de informe estaba simulado y no se efectuó ningún envío real nuevo.
+
 Las capturas [antes](screenshots/registro-390-antes.png), [inicio](screenshots/registro-390-inicio.png), [venta](screenshots/registro-390-venta.png), [informe](screenshots/registro-390-informe.png) y [publicidad](screenshots/registro-390-publicidad.png) usan **datos ficticios simulados**. La captura anterior procede del Preview del commit previo; las demás, del nuevo Preview. No muestran datos de Lucía ni prueban por sí mismas almacenamiento o entrega de correo.
 
 ### Discrepancia de despachos QA que debe conciliarse
