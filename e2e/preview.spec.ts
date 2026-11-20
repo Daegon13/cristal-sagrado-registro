@@ -96,11 +96,13 @@ test('390 px: reemisión exige motivo, revisión y confirmación administrativa'
  const id='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
  data.setReportStatus({period:{start:'2026-11-19',end:'2026-11-19'},current:{inquiries:9,newSales:5},previous:{id,revision:2,status:'sent',sentAt:now,hashPrefix:'61088b4780cc',hasSnapshot:true},differences:[{key:'inquiries',before:8,now:9,change:1},{key:'newSales',before:4,now:5,change:1}],history:[{id,revision:2,status:'sent',dispatch_kind:'legacy',trigger_source:'legacy',supersedes_id:null,reissue_reason:null,dispatched_at:now}],canReissue:true});
  await page.goto(preview!);await page.getByRole('button',{name:'Informe',exact:true}).click();
+ await page.locator('input[type=date]').first().fill('2026-11-19');await page.locator('input[type=date]').last().fill('2026-11-19');
  await expect(page.getByText('Diferencias desde esa revisión')).toBeVisible();
  const button=page.getByRole('button',{name:'Reemitir revisión 3'});await expect(button).toBeDisabled();
  await page.getByLabel('Motivo de reemisión administrativa (mínimo 10 caracteres)').fill('Corrección autorizada de datos QA');
  await page.getByRole('checkbox',{name:/Confirmo la reemisión/}).check();
- await expect(button).toBeEnabled();await page.screenshot({path:'docs/screenshots/registro-390-reemision.png',fullPage:true});await button.click();
+ await expect(button).toBeEnabled();await page.screenshot({path:'docs/screenshots/registro-390-reemision.png',fullPage:true});
+ await button.scrollIntoViewIfNeeded();await page.screenshot({path:'docs/screenshots/registro-390-reemision-confirmar.png',fullPage:true});await button.click();
  expect(data.requests.at(-1)).toMatchObject({mode:'reissue',start:'2026-11-19',end:'2026-11-19',expectedDispatchId:id,confirm:true});
 });
 
@@ -108,6 +110,7 @@ test('390 px: operador ve historial pero no puede reemitir',async({page})=>{
  const data=await fixture(page,100),id='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
  data.setReportStatus({period:{start:'2026-11-19',end:'2026-11-19'},current:{inquiries:9,newSales:5},previous:{id,revision:1,status:'sent',sentAt:now,hashPrefix:'abc',hasSnapshot:true},differences:[],history:[{id,revision:1,status:'sent',dispatch_kind:'initial',trigger_source:'manual',supersedes_id:null,dispatched_at:now}],canReissue:false});
  await page.goto(preview!);await page.getByRole('button',{name:'Informe',exact:true}).click();
+ await page.locator('input[type=date]').first().fill('2026-11-19');await page.locator('input[type=date]').last().fill('2026-11-19');
  await expect(page.getByText(/Informe ya emitido/)).toBeVisible();
  await expect(page.getByRole('button',{name:/Reemitir revisión/})).toHaveCount(0);
 });
