@@ -14,5 +14,5 @@ export function advertisingSummary(start:string,end:string,campaigns:Campaign[],
   if(e.starts_on>=start&&e.ends_on<=end)spent+=Number(e.amount);
   else unallocated++;
  }
- return {budget,spent,unallocated,partialBudgets,percent:budget>0?Math.round(spent/budget*100):null};
+ return {budget,spent,unallocated,partialBudgets,percent:budget>0&&unallocated===0&&partialBudgets===0?Math.round(spent/budget*100):null};
 }

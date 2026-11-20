@@ -47,6 +47,6 @@ test('100, 300 y 500 clientes ficticios: búsqueda acotada y sin selector comple
 test('un gasto que cruza semanas no se reparte ni se suma dos veces',()=>{
  const campaigns=[{starts_on:'2026-11-16',ends_on:'2026-11-29',budget_kind:'daily',budget_amount:100}];
  const entries=[{starts_on:'2026-11-19',ends_on:'2026-11-24',amount:900}];
- assert.deepEqual(advertisingSummary('2026-11-16','2026-11-22',campaigns,entries),{budget:700,spent:0,unallocated:1,partialBudgets:0,percent:0});
+ assert.deepEqual(advertisingSummary('2026-11-16','2026-11-22',campaigns,entries),{budget:700,spent:0,unallocated:1,partialBudgets:0,percent:null});
  assert.equal(advertisingSummary('2026-11-16','2026-11-29',campaigns,entries).spent,900);
 });
