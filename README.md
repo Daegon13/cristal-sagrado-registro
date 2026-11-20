@@ -2,11 +2,11 @@
 
 Aplicación privada para consultas, clientes, ventas, cobros, devoluciones, gastos e informes semanales en UYU. Next.js 16, Neon PostgreSQL y Neon Managed Better Auth. La interfaz conserva el flujo móvil de Lu y la PWA. Los datos financieros se consultan y modifican en el servidor con SQL parametrizado; el navegador nunca recibe credenciales Postgres.
 
-**Estado:** la PR #1 sigue en borrador y el uso real sigue en NO-GO. El flujo rápido de la incidencia #2 y la migración `004` se probaron en Preview. La configuración de Production, el acceso desde el Honor con URL definitiva y la conciliación de despachos QA quedan pendientes. Ver [informe de preproducción](docs/ISSUE_2_PREPROD_2026-11-20.md), [aceptación previa](docs/NEON_ACCEPTANCE_2026-11-19.md) y [configuración](docs/NEON_SETUP.md).
+**Estado:** PR #1 en borrador; Production NO-GO. Las incidencias #2 y #3 se implementaron en Preview. Ver [GO/NO-GO vigente](docs/ISSUE_3_RELEASE_GATE_2026-11-20.md), [aceptación de #2](docs/ISSUE_2_PREPROD_2026-11-20.md) y [configuración](docs/NEON_SETUP.md).
 
 ## Instalación
 
-1. Crear proyecto y rama Neon exclusivos. Habilitar Managed Better Auth. Aplicar `sql/003_neon_initial.sql` y luego `sql/004_daily_register.sql` a la rama vacía aprobada. Los scripts `001` y `002` son históricos de Supabase y no se ejecutan en Neon.
+1. Crear proyecto y rama Neon exclusivos. Habilitar Managed Better Auth. Aplicar `sql/003_neon_initial.sql`, `sql/004_daily_register.sql` y `sql/005_report_period_idempotency.sql` en ese orden a la rama vacía aprobada. Los scripts `001` y `002` son históricos de Supabase y no se ejecutan en Neon.
 2. Crear administrativamente las identidades de Lucía y Diego en Neon Auth. Crear organización y `memberships` con sus IDs reales como explica `docs/NEON_SETUP.md`. El registro público se bloquea en el proxy de la app; la URL directa de Neon Auth requiere revisión de configuración por separado.
 3. Configurar secretos de `.env.example` en servidor o Vercel. `DATABASE_URL`, `NEON_AUTH_BASE_URL` y `NEON_AUTH_COOKIE_SECRET` deben apuntar a la **misma rama de ensayo**. No usar variables `NEXT_PUBLIC_` para secretos. `REPORT_TO_EMAIL` es fijo; no se acepta destinatario del navegador.
 4. Ejecutar `npm ci`, `npm run typecheck`, `npm test`, `npm run build`, y `npm run dev`. Abrir `/api/health` para verificar `configured`. Sin variables, la pantalla indica configuración pendiente.
@@ -17,7 +17,7 @@ Aplicación privada para consultas, clientes, ventas, cobros, devoluciones, gast
 
 Cada operación sensible verifica sesión y membresía en servidor. Las claves foráneas compuestas `(org_id,id)` impiden referencias entre organizaciones. Las operaciones repetibles tienen claves de idempotencia; contacto y consulta se crean en una transacción. Las listas se recuperan en páginas y el informe calcula sobre todas las filas del período en la base, sin límite PostgREST. El respaldo JSON autenticado incluye todas las tablas de la organización, auditorías y envíos; `/api/export?format=csv` exporta movimientos. Conservar el respaldo cifrado fuera de Gmail y probar restauración antes de Production.
 
-El informe semanal se envía por Resend al correo fijo configurado, con JSON y CSV sin alias de clientes. La fila `report_dispatches` reserva el envío para impedir duplicados; un estado `pending` tras fallo ambiguo exige comprobación manual antes de reintentar. `/api/cron/weekly` requiere `CRON_SECRET` y se ejecuta lunes 12:00 UTC (09:00 Montevideo). Los envíos reales de Preview requieren autorización específica y conciliación posterior; no repetir ante resultado incierto.
+El informe semanal se envía por Resend al correo fijo configurado, con JSON y CSV sin alias de clientes. `report_period_claims` reserva de forma atómica organización, período y tipo; manual y cron comparten esa reserva. Un cambio de datos no crea un segundo envío automático. La reemisión exige rol `admin`, motivo, revisión y confirmación explícita; `pending` requiere conciliación antes de cualquier nuevo intento. `/api/cron/weekly` requiere `CRON_SECRET` y se ejecuta lunes 12:00 UTC (09:00 Montevideo). No se envían correos reales en pruebas automáticas.
 
 ## Seguridad y límites
 

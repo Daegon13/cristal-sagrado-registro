@@ -12,11 +12,13 @@ async function fixture(page:Page,count:number){
  const contacts:Row[]=Array.from({length:count},(_,n)=>({id:`${(n+1).toString(16).padStart(8,'0')}-1111-4111-8111-111111111111`,org_id:orgId,alias:n===count-1?'María Última':`Cliente ${n+1}`,instagram_handle:n===count-1?'maria.ultima':`cliente.${n+1}`,display_name:null,handle_confirmed:false,merged_into:null,source:'instagram',created_at:now}));
  const inquiries:Row[]=[{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',org_id:orgId,contact_id:contacts.at(-1)?.id,source:'instagram',created_at:now},{id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',org_id:orgId,contact_id:null,source:'web',created_at:now}];
  const sales:Row[]=[],payments:Row[]=[],expenses:Row[]=[],campaigns:Row[]=[],adSpends:Row[]=[],requests:Row[]=[];
+ let reportStatus:Row={period:{start:'2026-11-19',end:'2026-11-19'},current:{inquiries:2,newSales:0},previous:null,differences:null,history:[],canReissue:true};
  const tableRows:Record<string,Row[]>={contacts,inquiries,sales,payments,expenses,ad_campaigns:campaigns,ad_spend_entries:adSpends,audit_log:[]};
  await page.route('**/api/health',r=>r.fulfill({json:{status:'ok',configured:true}}));
  await page.route('**/api/auth/**',r=>r.fulfill({json:{session:{id:'session-qa',userId:'qa-user'},user:{id:'qa-user',email:'qa@example.invalid',name:'QA'}}}));
  await page.route('**/api/me',r=>r.fulfill({json:{orgId}}));
- await page.route('**/api/reports/send',async r=>{requests.push(r.request().postDataJSON());await r.fulfill({json:{ok:true}})});
+ await page.route('**/api/reports/status?**',r=>r.fulfill({json:reportStatus}));
+ await page.route('**/api/reports/send',async r=>{const body=r.request().postDataJSON();requests.push(body);await r.fulfill({json:{ok:true,revision:body.mode==='reissue'?3:1}})});
  await page.route('**/api/data?**',async r=>{
   const u=new URL(r.request().url()),table=u.searchParams.get('table')||'';
   if(table==='contact_search'){
@@ -41,7 +43,7 @@ async function fixture(page:Page,count:number){
   }
   return r.fulfill({json:{id:randomUUID()}});
  });
- return {contacts,inquiries,sales,payments,campaigns,adSpends,requests};
+ return {contacts,inquiries,sales,payments,campaigns,adSpends,requests,setReportStatus:(value:Row)=>{reportStatus=value}};
 }
 
 test('390 px: consulta → venta → cobro sin volver a buscar cliente; período exacto',async({page})=>{
@@ -87,6 +89,27 @@ test('390 px: ejecución de publicidad y cobertura visibles',async({page})=>{
  await expect(page.getByText(/no modifica ni detiene campañas en Meta/)).toBeVisible();
  await page.screenshot({path:'docs/screenshots/registro-390-publicidad.png',fullPage:true});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+});
+
+test('390 px: reemisión exige motivo, revisión y confirmación administrativa',async({page})=>{
+ const data=await fixture(page,100);
+ const id='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+ data.setReportStatus({period:{start:'2026-11-19',end:'2026-11-19'},current:{inquiries:9,newSales:5},previous:{id,revision:2,status:'sent',sentAt:now,hashPrefix:'61088b4780cc',hasSnapshot:true},differences:[{key:'inquiries',before:8,now:9,change:1},{key:'newSales',before:4,now:5,change:1}],history:[{id,revision:2,status:'sent',dispatch_kind:'legacy',trigger_source:'legacy',supersedes_id:null,reissue_reason:null,dispatched_at:now}],canReissue:true});
+ await page.goto(preview!);await page.getByRole('button',{name:'Informe',exact:true}).click();
+ await expect(page.getByText('Diferencias desde esa revisión')).toBeVisible();
+ const button=page.getByRole('button',{name:'Reemitir revisión 3'});await expect(button).toBeDisabled();
+ await page.getByLabel('Motivo de reemisión administrativa (mínimo 10 caracteres)').fill('Corrección autorizada de datos QA');
+ await page.getByRole('checkbox',{name:/Confirmo la reemisión/}).check();
+ await expect(button).toBeEnabled();await page.screenshot({path:'docs/screenshots/registro-390-reemision.png',fullPage:true});await button.click();
+ expect(data.requests.at(-1)).toMatchObject({mode:'reissue',start:'2026-11-19',end:'2026-11-19',expectedDispatchId:id,confirm:true});
+});
+
+test('390 px: operador ve historial pero no puede reemitir',async({page})=>{
+ const data=await fixture(page,100),id='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+ data.setReportStatus({period:{start:'2026-11-19',end:'2026-11-19'},current:{inquiries:9,newSales:5},previous:{id,revision:1,status:'sent',sentAt:now,hashPrefix:'abc',hasSnapshot:true},differences:[],history:[{id,revision:1,status:'sent',dispatch_kind:'initial',trigger_source:'manual',supersedes_id:null,dispatched_at:now}],canReissue:false});
+ await page.goto(preview!);await page.getByRole('button',{name:'Informe',exact:true}).click();
+ await expect(page.getByText(/Informe ya emitido/)).toBeVisible();
+ await expect(page.getByRole('button',{name:/Reemitir revisión/})).toHaveCount(0);
 });
 
 test('captura anterior a issue #2 en el Preview del commit previo',async({page})=>{

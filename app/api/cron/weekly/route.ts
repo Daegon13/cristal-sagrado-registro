@@ -21,6 +21,6 @@ export async function GET(request: NextRequest) {
   try {
     const member=await database().query('SELECT id FROM organizations WHERE id=$1',[process.env.REPORT_ORG_ID]);
     if(!member.rowCount)return NextResponse.json({error:'Organización no encontrada'},{status:503});
-    return NextResponse.json(await sendReport(process.env.REPORT_ORG_ID,period.start,period.end,null));
+    return NextResponse.json(await sendReport(process.env.REPORT_ORG_ID,period.start,period.end,{kind:'automatic',source:'cron',actor:null}));
   } catch { return NextResponse.json({error:'No se pudo completar el informe semanal.'},{status:503}); }
 }

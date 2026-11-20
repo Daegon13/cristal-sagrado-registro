@@ -1,5 +1,7 @@
 # Incidencia #2: preproducción de Registro (20/11/2026)
 
+**Actualización posterior:** el propietario confirmó la recepción de ambos informes QA. La corrección del doble despacho y el GO/NO-GO vigente están en [incidencia #3](ISSUE_3_RELEASE_GATE_2026-11-20.md). La observación histórica de más abajo refleja lo que se sabía al cerrar #2.
+
 ## Decisión
 
 **GO técnico para continuar en Preview; NO-GO para Production.** PR #1 sigue abierta y en borrador sobre `feat/neon-migration`; `main` no se fusionó. Ningún dato de QA se copió a Production. El cambio prioriza registrar consultas, ventas y cobros con pocos pasos. Esta aceptación no autoriza un envío de correo, un cambio de plan con costo, una migración productiva ni el despliegue público.
