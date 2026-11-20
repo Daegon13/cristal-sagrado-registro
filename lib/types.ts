@@ -1,9 +1,11 @@
-export type Contact = { id: string; org_id: string; alias: string; source: string; source_detail: string | null; created_at: string };
+export type Contact = { id: string; org_id: string; alias: string; display_name:string|null; instagram_handle:string|null; handle_confirmed:boolean; merged_into:string|null; source: string; source_detail: string | null; created_at: string };
 export type Inquiry = { id: string; org_id: string; contact_id: string | null; source: string; created_at: string; note: string | null };
-export type Sale = { id: string; org_id: string; contact_id: string; service: string; agreed_amount: number; created_at: string; status: string };
+export type Sale = { id: string; org_id: string; contact_id: string; inquiry_id:string|null; service: string; agreed_amount: number; created_at: string; status: string };
 export type AuditEntry = {id:number;table_name:string;operation:string;created_at:string;actor:string|null;before_data:Record<string,unknown>|null;after_data:Record<string,unknown>|null};
 export type Payment = { id: string; org_id: string; sale_id: string; amount: number; method: string; kind: string; received_at: string; idempotency_key: string; note: string | null; voided_at:string|null; void_reason:string|null; voided_by:string|null };
 export type Expense = { id: string; org_id: string; amount: number; category: string; occurred_on: string; note: string | null; idempotency_key:string|null; voided_at:string|null; void_reason:string|null; voided_by:string|null };
+export type AdCampaign={id:string;org_id:string;name:string;starts_on:string;ends_on:string;budget_kind:'daily'|'total';budget_amount:string;created_at:string};
+export type AdSpend={id:string;org_id:string;campaign_id:string|null;starts_on:string;ends_on:string;amount:string;voided_at:string|null;note:string|null};
 export const SOURCES = [{value:'instagram',label:'Instagram directo'},{value:'instagram_ads',label:'Anuncio Instagram'},{value:'web',label:'Web'},{value:'referral',label:'Recomendación'},{value:'returning',label:'Recurrente'},{value:'other',label:'Otro / no sé'}];
 export const METHODS = [{value:'prex',label:'Prex'},{value:'itau',label:'Itaú'},{value:'cash',label:'Efectivo'},{value:'other',label:'Otro'}];
 export const SERVICES = ['Amarre','Retorno','Endulzamiento','Dominio','Limpieza energética','Abrecaminos','Tarot','Otro'];

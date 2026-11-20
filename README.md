@@ -1,79 +1,26 @@
 # Cristal Sagrado · Registro
 
-PWA privada para que Lucía registre consultas, ventas, cobros, devoluciones y gastos en pocos toques, y para enviar resúmenes estructurados a Gmail para auditorías de Diego/ChatGPT.
+Aplicación privada para consultas, clientes, ventas, cobros, devoluciones, gastos e informes semanales en UYU. Next.js 16, Neon PostgreSQL y Neon Managed Better Auth. La interfaz conserva el flujo móvil de Lu y la PWA. Los datos financieros se consultan y modifican en el servidor con SQL parametrizado; el navegador nunca recibe credenciales Postgres.
 
-**Estado:** código MVP reforzado, pruebas de lógica aprobadas, sin dependencias instaladas ni credenciales de Supabase/Resend y **sin despliegue**. Proyecto Vercel reservado: `cristal-sagrado-registro` en equipo `daegon13s-projects`, ID `prj_kDrAYqml8JcQ8RSFPW3fbVuzpTtt`. No modifica la web pública.
+**Estado:** PR #1 en borrador; Production NO-GO. Las incidencias #2 y #3 se implementaron en Preview. Ver [GO/NO-GO vigente](docs/ISSUE_3_RELEASE_GATE_2026-11-20.md), [aceptación de #2](docs/ISSUE_2_PREPROD_2026-11-20.md) y [configuración](docs/NEON_SETUP.md).
 
-## Arquitectura
-- Next.js App Router / TypeScript / estilos propios mobile-first; PWA con manifiesto e iconos estándar y maskable (192/512 px).
-- Supabase Auth (sin alta pública) y PostgreSQL con RLS por organización.
-- Resend en API server-side para enviar informe resumido y CSV/JSON **sin datos personales de clientes**.
-- Gmail es destino de auditoría y archivo; la base transaccional es Supabase.
-- Zona horaria de cálculo `America/Montevideo` (UTC-03); dinero en UYU.
+## Instalación
 
-## Configuración en un entorno nuevo
-1. Creá **un proyecto Supabase independiente**. No uses el de Smart Stock ni el de la web pública.
-2. En **SQL Editor**, ejecutá **en orden** `sql/001_initial.sql` y `sql/002_hardening.sql`. El primero crea organizaciones, tablas y RLS; el segundo añade operaciones idempotentes, ajustes con motivo y auditoría.
-3. En Authentication > Users, creá o invitá las cuentas de Lucía y Diego; deshabilitá el alta pública. Anotá los UUID de esos usuarios y ejecutá el bloque SQL del final del archivo para crear la organización y sus membresías. Nunca copies contraseñas al repositorio.
-4. Verificá un dominio remitente en Resend; usá `REPORT_FROM_EMAIL` de ese dominio. El destinatario `REPORT_TO_EMAIL` debe ser el correo de Diego que quiera usar para auditorías.
-5. Configurá en Vercel las variables `.env.example` (sin subir `.env` ni secretos a GitHub):
-   - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`: son públicas, sujetas a RLS.
-   - `SUPABASE_SERVICE_ROLE_KEY`: **secreto**; solo se utiliza en `app/api/reports/send/route.ts` del servidor. No prefijar con `NEXT_PUBLIC_`.
-   - `RESEND_API_KEY`: secreto para el envío.
-   - `REPORT_FROM_EMAIL`, `REPORT_TO_EMAIL`: direcciones. `REPORT_TO_EMAIL=damgmarin13@gmail.com` **ya está configurada** en este proyecto Vercel.
-   - `CRON_SECRET`: secreto aleatorio fuerte, nunca expuesto al navegador; protege `/api/cron/weekly`.
-   - `REPORT_ORG_ID`: UUID de la organización creado en el paso 3; evita que el cron envíe informes de otra organización.
-6. Vinculá un repositorio GitHub **nuevo y privado**, independiente de `cristal-sagrado-site`, al proyecto Vercel que ya está creado. Subí el contenido de este ZIP allí y configurá Next.js con raíz del repo.
-7. Instalá dependencias y probá: `npm install && npm run typecheck && npm test && npm run build && npm run dev`. En este entorno **sí** se ejecutó `npm test` con **6 casos aprobados**, pero no fue posible instalar npm (error de red), así que el typecheck de todo el proyecto y el build siguen pendientes.
-8. Desde el Honor de Lucía, abrí la URL HTTPS protegida, iniciá sesión y elegí en Chrome «Agregar a pantalla principal» o «Instalar» cuando esté disponible. Los iconos 192/512 px ya están incluidos en el manifiesto. La app requiere conexión; no tiene almacenamiento transaccional offline.
-9. Antes de usar datos reales, hacé las pruebas de `docs/PRUEBAS_Y_ENTREGA.md`; verificá políticas RLS con dos cuentas y el flujo de email. El cron está preparado en `vercel.json` para **lunes 12:00 UTC (09:00 Montevideo)** y solo se activa una vez configuradas sus variables.
-
-**Importante:** la conexión del equipo Vercel ya se autorizó, pero la creación del proyecto no publica una aplicación. No hay URL funcional de registro hasta que el repositorio y las variables estén configurados y se realice el despliegue.
+1. Crear proyecto y rama Neon exclusivos. Habilitar Managed Better Auth. Aplicar `sql/003_neon_initial.sql`, `sql/004_daily_register.sql` y `sql/005_report_period_idempotency.sql` en ese orden a la rama vacía aprobada. Los scripts `001` y `002` son históricos de Supabase y no se ejecutan en Neon.
+2. Crear administrativamente las identidades de Lucía y Diego en Neon Auth. Crear organización y `memberships` con sus IDs reales como explica `docs/NEON_SETUP.md`. El registro público se bloquea en el proxy de la app; la URL directa de Neon Auth requiere revisión de configuración por separado.
+3. Configurar secretos de `.env.example` en servidor o Vercel. `DATABASE_URL`, `NEON_AUTH_BASE_URL` y `NEON_AUTH_COOKIE_SECRET` deben apuntar a la **misma rama de ensayo**. No usar variables `NEXT_PUBLIC_` para secretos. `REPORT_TO_EMAIL` es fijo; no se acepta destinatario del navegador.
+4. Ejecutar `npm ci`, `npm run typecheck`, `npm test`, `npm run build`, y `npm run dev`. Abrir `/api/health` para verificar `configured`. Sin variables, la pantalla indica configuración pendiente.
 
 ## Modelo contable
-- `contacts`: cliente único o alias temporal, y origen inicial.
-- `inquiries`: cada consulta; puede estar vinculada a un cliente existente. **Un evento no equivale a una persona única**.
-- `sales`: servicio contratado e importe acordado. No es ingreso de caja.
-- `payments`: cada cobro o devolución, vinculados a una venta; `idempotency_key` único.
-- `expenses`: costo efectivamente asignado a la fecha del gasto (publicidad, materiales, comisiones, otros).
-- `audit_log`: historial de inserciones y modificaciones para revisión.
-- `report_dispatches`: registro de informes emitidos con SHA-256 para evitar un segundo envío idéntico desde la app.
 
-**Métricas:** `cobrado neto = pagos - devoluciones`; `diferencia parcial = cobrado neto - gastos registrados`. Esto **no** representa beneficio fiscal, rentabilidad final ni conciliación bancaria. El gasto real de Meta se ingresa manualmente; sus recibos no son automáticamente gasto atribuido a esa semana.
+`sales.agreed_amount` representa venta comprometida, no dinero recibido. `payments` almacena cobros y devoluciones; una anulación conserva el asiento y registra autor, motivo y momento. `expenses` representa gasto manual. Los importes son `numeric(12,2)` y los informes calculan en centésimos UYU. La diferencia entre neto cobrado y gastos registrados no es beneficio fiscal ni conciliación bancaria. La fuente de un contacto es declarada, no atribución verificada de Meta.
 
-## Estado de funciones
-| Función | Estado en el código |
-|---|---|
-| Inicio de sesión privado | Implementado; requiere Supabase |
-| Consultas rápidas IG | Implementado; requiere Supabase |
-| Clientes y ventas | Implementado |
-| Cobros y devoluciones | Implementado |
-| Gastos manuales | Implementado |
-| Vista de finanzas semanal | Implementado |
-| Botón informe a Gmail JSON+CSV | Implementado; requiere Resend y claves servidor |
-| Exportar respaldo JSON | Implementado en interfaz |
-| Cron automático lunes | Código y cron definidos; **inactivo hasta configurar secretos y desplegar** |
-| Importación automática Meta/Umami | Pendiente; no falsear atribuciones |
-| Conciliación bancaria | Pendiente |
-| Exportación histórica paginada >1000 registros | Pendiente; el sistema detecta truncamiento y se niega a informar cifras parciales |
-| Edición de alias, anulación de cobros/gastos | Implementado en UI y SQL; pendiente de pruebas reales Supabase |
-| Offline robusto | No implementado; necesita conexión |
-| Iconos instalables PWA | Incluidos en PNG 192/512 + máscara |
+Cada operación sensible verifica sesión y membresía en servidor. Las claves foráneas compuestas `(org_id,id)` impiden referencias entre organizaciones. Las operaciones repetibles tienen claves de idempotencia; contacto y consulta se crean en una transacción. Las listas se recuperan en páginas y el informe calcula sobre todas las filas del período en la base, sin límite PostgREST. El respaldo JSON autenticado incluye todas las tablas de la organización, auditorías y envíos; `/api/export?format=csv` exporta movimientos. Conservar el respaldo cifrado fuera de Gmail y probar restauración antes de Production.
 
-## Seguridad
-- Servidor comprueba JWT mediante `supabase.auth.getUser(token)` y membresía antes de usar la credencial de servicio en informes.
-- Todas las consultas de informe se filtran por `org_id`; los datos personales (`alias`) no se transmiten en el correo.
-- La base tiene RLS; operaciones sensibles requieren sesión válida y pertenencia a la organización.
-- Para informes desde Gmail evitar datos identificables y usar una etiqueta `CS-FINANZAS`; nunca incluir fotos, nombres reales, teléfonos, fechas de nacimiento o conversaciones en adjuntos.
-- Limitar manualmente destinatarios desde `REPORT_TO_EMAIL`; la interfaz nunca acepta correos arbitrarios.
-- Crear respaldo cifrado fuera de Gmail, y comprobar restauración antes de operar con pagos reales.
+El informe semanal se envía por Resend al correo fijo configurado, con JSON y CSV sin alias de clientes. `report_period_claims` reserva de forma atómica organización, período y tipo; manual y cron comparten esa reserva. Un cambio de datos no crea un segundo envío automático. La reemisión exige rol `admin`, motivo, revisión y confirmación explícita; `pending` requiere conciliación antes de cualquier nuevo intento. `/api/cron/weekly` requiere `CRON_SECRET` y se ejecuta lunes 12:00 UTC (09:00 Montevideo). No se envían correos reales en pruebas automáticas.
 
-## Limitaciones conocidas para salir a producción
-- El MVP aún no está probado contra Supabase/Resend reales, ni compilado en este entorno porque npm no pudo acceder al registro para instalar dependencias.
-- La UI solicita hasta 2000 registros por tabla, pero PostgREST puede aplicar un límite menor (frecuentemente 1000). El código compara el conteo total con lo recibido y **detiene** informes/métricas si hay truncamiento. Hay que implementar paginación para escalar.
-- Las consultas ahora se registran con RPC transaccional y `idempotency_key` en `002_hardening.sql` para resistir reintentos. Es necesario verificarlo con dos dispositivos y condiciones de red reales.
-- Las claves de idempotencia de cobros y gastos se conservan durante el formulario y se regeneran al abrir uno nuevo. Si el servidor guardó pero la respuesta se perdió, un reintento no debe duplicar el movimiento; puede mostrar un error de clave ya utilizada, por lo que hay que refrescar y verificar antes de insistir.
-- Antes de manejar dinero real: probar y reforzar manejo de correcciones, doble envío y recuperación de sesiones.
+## Seguridad y límites
 
-## Integración con ChatGPT Work
-Para finalizar instalación, credenciales y despliegue sin repetir esta especificación, cargá el ZIP en **Work** y entregá `docs/WORK_HANDOFF.md`. No compartas contraseñas ni claves en el chat; ingresalas en los paneles de Supabase, Resend y Vercel.
+La app no ofrece alta pública, almacenamiento offline transaccional ni conciliación bancaria. La membresía se comprueba en cada endpoint de datos, exportación e informe; una identidad registrada sin membresía no puede usar datos financieros. Los roles `operator` y `admin` son internos; la gestión de membresías se realiza fuera de la app por una persona con acceso administrativo a Neon. Las rutas de Auth de Neon requieren configuración de dominios y proveedor en Neon. Una compilación local no demuestra sesiones, base, Gmail ni cron operativos; esas pruebas requieren la rama de ensayo y cuentas de prueba.
+
+El paquete oficial `@neon/auth` 0.8.2 trae `@supabase/auth-js` como dependencia transitiva. Este proyecto no importa ese paquete, no usa Supabase como servicio y no contiene claves de Supabase. La dependencia transitiva del proveedor queda pendiente de eliminación por Neon si el criterio exige cero paquetes con ese nombre en el lockfile.
