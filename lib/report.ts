@@ -5,6 +5,7 @@ import { addDays, utcBoundary } from '@/lib/time';
 import { advertisingSummary } from '@/lib/ads';
 import { deliverReport, latestReport, metricDifferences, reportHistory, ProviderRejectedError, type ReportDb, type ReportMode, type ReportData } from '@/lib/report-delivery';
 import { reportEmail } from '@/lib/report-email';
+import { reportDeliveryDisabled } from '@/lib/experiment-policy';
 
 type Payment={id:string;sale_id:string;amount:string;method:string;kind:'payment'|'refund';received_at:string;source:string;contact_id:string};
 type Expense={id:string;amount:string;category:string;occurred_on:string};
@@ -48,6 +49,7 @@ export async function getReportStatus(orgId:string,start:string,end:string){
 }
 
 export async function sendReport(orgId:string,start:string,end:string,mode:ReportMode){
+ if(reportDeliveryDisabled)throw new Error('REPORT_DELIVERY_DISABLED');
  const key=process.env.RESEND_API_KEY,to=process.env.REPORT_TO_EMAIL,from=process.env.REPORT_FROM_EMAIL;
  if(!key||!to||!from)throw new Error('REPORT_NOT_CONFIGURED');
  let prepared:Awaited<ReturnType<typeof buildReport>>|undefined;

@@ -3,9 +3,11 @@ import { isValidCalendarDate, localToday } from '@/lib/time';
 import { sendReport } from '@/lib/report';
 import { ReportDispatchError } from '@/lib/report-delivery';
 import { sameOrigin } from '@/lib/http';
+import { reportDeliveryDisabled } from '@/lib/experiment-policy';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 export async function POST(request:Request){
+ if(reportDeliveryDisabled)return Response.json({error:'Envío de informes desactivado en este ensayo.'},{status:503});
  try{if(!sameOrigin(request))return Response.json({error:'Origen no autorizado.'},{status:403});const body=await request.json() as {orgId?:string;start?:string;end?:string;mode?:string;reason?:string;expectedDispatchId?:string;requestKey?:string;confirm?:boolean};
   const ctx=await access(body.orgId);
   if(!isValidCalendarDate(body.start)||!isValidCalendarDate(body.end)||body.end<body.start||body.end>localToday()||(Date.parse(body.end)-Date.parse(body.start))/86400000>35)return Response.json({error:'Fechas inválidas.'},{status:400});

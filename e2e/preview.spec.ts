@@ -46,7 +46,7 @@ async function fixture(page:Page,count:number){
  return {contacts,inquiries,sales,payments,campaigns,adSpends,requests,setReportStatus:(value:Row)=>{reportStatus=value}};
 }
 
-test('390 px: consulta → venta → cobro sin volver a buscar cliente; período exacto',async({page})=>{
+test('390 px: consulta → venta → cobro; informe pausado con período exacto',async({page})=>{
  const data=await fixture(page,500);await page.goto(preview!);await expect(page.getByText('Consultas recientes')).toBeVisible();
  await mkdir('docs/screenshots',{recursive:true});
  await page.screenshot({path:'docs/screenshots/registro-390-inicio.png',fullPage:true});
@@ -62,11 +62,12 @@ test('390 px: consulta → venta → cobro sin volver a buscar cliente; período
  await page.getByRole('button',{name:'Informe',exact:true}).click();
  await page.locator('input[type=date]').first().fill('2026-11-19');
  await page.locator('input[type=date]').last().fill('2026-11-19');
- await expect(page.getByText('Se enviará exactamente:')).toContainText('2026-11-19 a 2026-11-19');
+ await expect(page.getByText('Período seleccionado:')).toContainText('2026-11-19 a 2026-11-19');
  await page.getByRole('checkbox',{name:'Confirmo estas dos fechas'}).check();
  await page.screenshot({path:'docs/screenshots/registro-390-informe.png',fullPage:true});
- await page.getByRole('button',{name:'Enviar 2026-11-19 a 2026-11-19'}).click();
- expect(data.requests.find(x=>x.start==='2026-11-19')).toMatchObject({start:'2026-11-19',end:'2026-11-19'});
+ await expect(page.getByRole('button',{name:'Enviar 2026-11-19 a 2026-11-19'})).toBeDisabled();
+ await expect(page.getByText(/Envío de informes desactivado durante el ensayo/)).toBeVisible();
+ expect(data.requests.filter(x=>x.mode==='initial')).toHaveLength(0);
 });
 
 for(const count of [100,300,500])test(`390 px: búsqueda con ${count} clientes ficticios`,async({page})=>{
@@ -80,6 +81,7 @@ for(const count of [100,300,500])test(`390 px: búsqueda con ${count} clientes f
 });
 
 test('390 px: ejecución de publicidad y cobertura visibles',async({page})=>{
+ await page.clock.setFixedTime(new Date(now));
  const data=await fixture(page,100);
  data.campaigns.push({id:randomUUID(),org_id:orgId,name:'Campaña ficticia',starts_on:'2026-11-16',ends_on:'2026-11-20',budget_kind:'daily',budget_amount:'100'});
  data.adSpends.push({id:randomUUID(),org_id:orgId,campaign_id:data.campaigns[0].id,starts_on:'2026-11-16',ends_on:'2026-11-20',amount:'600',voided_at:null,note:null});
@@ -91,7 +93,7 @@ test('390 px: ejecución de publicidad y cobertura visibles',async({page})=>{
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
 });
 
-test('390 px: reemisión exige motivo, revisión y confirmación administrativa',async({page})=>{
+test('390 px: historial y motivo de reemisión visibles; envío pausado',async({page})=>{
  const data=await fixture(page,100);
  const id='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
  data.setReportStatus({period:{start:'2026-11-19',end:'2026-11-19'},current:{inquiries:9,newSales:5},previous:{id,revision:2,status:'sent',sentAt:now,hashPrefix:'61088b4780cc',hasSnapshot:true},differences:[{key:'inquiries',before:8,now:9,change:1},{key:'newSales',before:4,now:5,change:1}],history:[{id,revision:2,status:'sent',dispatch_kind:'legacy',trigger_source:'legacy',supersedes_id:null,reissue_reason:null,dispatched_at:now}],canReissue:true});
@@ -101,9 +103,9 @@ test('390 px: reemisión exige motivo, revisión y confirmación administrativa'
  const button=page.getByRole('button',{name:'Reemitir revisión 3'});await expect(button).toBeDisabled();
  await page.getByLabel('Motivo de reemisión administrativa (mínimo 10 caracteres)').fill('Corrección autorizada de datos QA');
  await page.getByRole('checkbox',{name:/Confirmo la reemisión/}).check();
- await expect(button).toBeEnabled();await page.screenshot({path:'docs/screenshots/registro-390-reemision.png',fullPage:true});
- await button.scrollIntoViewIfNeeded();await page.screenshot({path:'docs/screenshots/registro-390-reemision-confirmar.png',fullPage:true});await button.click();
- expect(data.requests.at(-1)).toMatchObject({mode:'reissue',start:'2026-11-19',end:'2026-11-19',expectedDispatchId:id,confirm:true});
+ await expect(button).toBeDisabled();await page.screenshot({path:'docs/screenshots/registro-390-reemision.png',fullPage:true});
+ await button.scrollIntoViewIfNeeded();await page.screenshot({path:'docs/screenshots/registro-390-reemision-confirmar.png',fullPage:true});
+ expect(data.requests.filter(x=>x.mode==='reissue')).toHaveLength(0);
 });
 
 test('390 px: operador ve historial pero no puede reemitir',async({page})=>{

@@ -3,12 +3,14 @@ import { sendReport } from '@/lib/report';
 import { database } from '@/lib/db';
 import { timingSafeEqual } from 'node:crypto';
 import { previousClosedWeek, localToday } from '@/lib/time';
+import { reportDeliveryDisabled } from '@/lib/experiment-policy';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 // Scheduled by Vercel on Mondays 12:00 UTC (09:00 in Uruguay).
 export async function GET(request: NextRequest) {
+  if(reportDeliveryDisabled)return NextResponse.json({error:'Informe semanal desactivado en este ensayo.'},{status:503});
   const secret=process.env.CRON_SECRET;
   const authorization=request.headers.get('authorization')||'',supplied=authorization.startsWith('Bearer ')?authorization.slice(7):'';
   if(!secret||!supplied||Buffer.byteLength(secret)!==Buffer.byteLength(supplied)||!timingSafeEqual(Buffer.from(secret),Buffer.from(supplied)))

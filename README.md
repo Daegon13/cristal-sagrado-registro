@@ -1,5 +1,7 @@
 # Cristal Sagrado · Registro
 
+> Rama `experiment/netlify-free`: ensayo aislado de alojamiento en Netlify. El envío de informes y el cron están bloqueados en esta rama. Estado, configuración manual, pruebas y estimación de créditos: [ensayo Netlify Free](docs/NETLIFY_FREE_EXPERIMENT.md).
+
 Aplicación privada para consultas, clientes, ventas, cobros, devoluciones, gastos e informes semanales en UYU. Next.js 16, Neon PostgreSQL y Neon Managed Better Auth. La interfaz conserva el flujo móvil de Lu y la PWA. Los datos financieros se consultan y modifican en el servidor con SQL parametrizado; el navegador nunca recibe credenciales Postgres.
 
 **Estado:** PR #1 en borrador; Production NO-GO. Las incidencias #2 y #3 se implementaron en Preview. Ver [GO/NO-GO vigente](docs/ISSUE_3_RELEASE_GATE_2026-11-20.md), [aceptación de #2](docs/ISSUE_2_PREPROD_2026-11-20.md) y [configuración](docs/NEON_SETUP.md).

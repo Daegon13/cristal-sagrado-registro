@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "experiment/netlify-free": false
+    }
+  },
   "crons": [
     {"path": "/api/cron/weekly", "schedule": "0 12 * * 1"}
   ]
