@@ -1,10 +1,11 @@
 import 'server-only';
 import { auth } from '@/lib/auth/server';
 import { database } from '@/lib/db';
+import { isTrialEnvironmentConfigured } from '@/lib/experiment-env';
 
 export class AccessError extends Error { constructor(public status: number, message: string) { super(message); } }
 export async function access(orgId?: string) {
-  if (!process.env.DATABASE_URL || !process.env.NEON_AUTH_BASE_URL || !process.env.NEON_AUTH_COOKIE_SECRET) throw new AccessError(503, 'Configuración pendiente.');
+  if (!isTrialEnvironmentConfigured(process.env)) throw new AccessError(503, 'Configuración pendiente.');
   const { data: session } = await auth.getSession();
   const userId = session?.user?.id;
   if (!userId) throw new AccessError(401, 'Iniciá sesión.');

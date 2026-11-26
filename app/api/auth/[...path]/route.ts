@@ -1,9 +1,10 @@
 import { auth } from '@/lib/auth/server';
 import { NextResponse, type NextRequest } from 'next/server';
+import { isTrialEnvironmentConfigured } from '@/lib/experiment-env';
 
 export const runtime = 'nodejs';
 const handlers = auth.handler();
-const ready=()=>Boolean(process.env.NEON_AUTH_BASE_URL && process.env.NEON_AUTH_COOKIE_SECRET && process.env.DATABASE_URL);
+const ready=()=>isTrialEnvironmentConfigured(process.env);
 const unavailable=()=>NextResponse.json({error:'Configuración pendiente'},{status:503,headers:{'Cache-Control':'no-store'}});
 const noStore=(response:Response)=>{response.headers.set('Cache-Control','no-store');return response};
 export async function GET(request:NextRequest, context:Parameters<typeof handlers.GET>[1]){return ready()?noStore(await handlers.GET(request,context)):unavailable()}
