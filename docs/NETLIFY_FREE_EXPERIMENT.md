@@ -1,5 +1,7 @@
 # Ensayo Netlify Free · Registro
 
+> Actualización del 25/11/2026: el sitio `https://cristal-sagrado-registro.netlify.app` ya existe. Los pasos originales de creación de sitio que siguen abajo son históricos y no deben repetirse. La evaluación vigente y las acciones pendientes están en [NETLIFY_EVALUATION.md](NETLIFY_EVALUATION.md).
+
 Estado al 24/11/2026 (America/Montevideo): **preparado localmente; despliegue Netlify y aceptación autenticada pendientes**. Esta rama no cambia `main`, la PR #1 ni el proyecto Vercel. La rama Git `experiment/netlify-free` parte de `feat/neon-migration` en `57d1c5a`.
 
 La sesión de trabajo no dispone de una conexión autenticada a una cuenta Netlify; el sitio, sus secretos y la medición de créditos requieren los pasos manuales siguientes. La rama Git ya está publicada como `origin/experiment/netlify-free`.
